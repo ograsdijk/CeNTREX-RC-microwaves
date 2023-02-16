@@ -1,0 +1,7 @@
+pyvisa
+windfreak
+numpy
+nidaqmx
+matplotlib
+ipykernel
+tqdm
