@@ -5,3 +5,5 @@ nidaqmx
 matplotlib
 ipykernel
 tqdm
+plotly
+pandas
