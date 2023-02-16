@@ -1,9 +1,140 @@
-import pickle
+from pathlib import Path
+from typing import Sequence
 
 import numpy as np
 import pandas as pd
 import plotly.express as px
 import streamlit as st
+from scipy.interpolate import RegularGridInterpolator, interp1d
+
+file_path = Path(__file__).parent
+
+
+def interpolate_1D(fname: str, path: Path, indices: Sequence[int]) -> interp1d:
+    data = np.loadtxt(path / fname, skiprows=1, delimiter=",")
+
+    x, y = data.T[indices]
+    return interp1d(x, y)
+
+
+def interpolate_2D(
+    fname: str, path: Path, indices: Sequence[int]
+) -> RegularGridInterpolator:
+    data = np.loadtxt(path / fname, skiprows=1, delimiter=",")
+
+    x, y, z = data.T[indices]
+    _, idx = np.unique(x, return_index=True)
+    x = x[np.sort(idx)]
+    _, idy = np.unique(y, return_index=True)
+    y = y[np.sort(idy)]
+
+    return RegularGridInterpolator((x, y), z.reshape(len(x), len(y)))
+
+
+"""
+Calibrate SynthHD
+"""
+
+fname_RFA = "2023_02_13_synthHDPro_SN415_RFA_scan.csv"
+fname_RFB = "2023_02_14_synthHDPro_SN415_RFB_scan.csv"
+
+fn_interpolate_SN415_RFA = interpolate_2D(
+    fname_RFA, file_path / "measurements SynthHD/data", indices=[0, 1, 2]
+)
+fn_interpolate_SN415_RFB = interpolate_2D(
+    fname_RFB, file_path / "measurements SynthHD/data", indices=[0, 1, 2]
+)
+
+fname_RFB = "2023_02_10_synthHDPro_SN416_RFB_scan.csv"
+fn_interpolate_SN416_RFB = interpolate_2D(
+    fname_RFB, file_path / "measurements SynthHD/data", indices=[0, 1, 2]
+)
+
+"""
+Calibrate 26.7 GHz
+"""
+
+fname = "2023_2_9_synthpower_vg1.csv"
+
+fn_interpolate_26_6GHz_A1 = interpolate_2D(
+    fname, file_path / "measurements 26 GHz 2023_2/data", [0, 1, 2]
+)
+# dBm setpoints from SynthHD Pro SN 416 RFB
+setpoints_416 = fn_interpolate_26_6GHz_A1.grid[0]
+points = np.vstack([np.ones(len(setpoints_416)) * 13.3e9, setpoints_416]).T
+real_power = fn_interpolate_SN416_RFB(points)
+
+grid = list(fn_interpolate_26_6GHz_A1.grid)
+grid[0] = real_power
+fn_interpolate_26_6GHz_A1.grid = tuple(grid)
+
+fname = "2023_2_9_synthpower_vg2.csv"
+
+fn_interpolate_26_6GHz_A2 = interpolate_2D(
+    fname, file_path / "measurements 26 GHz 2023_2/data", [0, 1, 2]
+)
+# dBm setpoints from SynthHD Pro SN 416 RFB
+setpoints_416 = fn_interpolate_26_6GHz_A2.grid[0]
+points = np.vstack([np.ones(len(setpoints_416)) * 13.3e9, setpoints_416]).T
+real_power = fn_interpolate_SN416_RFB(points)
+
+grid = list(fn_interpolate_26_6GHz_A2.grid)
+grid[0] = real_power
+fn_interpolate_26_6GHz_A2.grid = tuple(grid)
+
+"""
+Calibrate 40 GHz
+"""
+
+fname = "2023_2_10_a1_synthd_power.csv"
+
+fn_interpolate_40GHz_A1 = interpolate_1D(
+    fname, file_path / "measurements 40 GHz 2023_2/data", indices=[0, 1]
+)
+# forgot to add 20 dBm to compensate attenuation from directional coupler
+fn_interpolate_40GHz_A1.y += 20
+
+# dBm setpoints from SynthHD Pro SN 416 RFB
+setpoints_416 = fn_interpolate_40GHz_A1.x
+points = np.vstack([np.ones(len(setpoints_416)) * 10e9, setpoints_416]).T
+real_power = fn_interpolate_SN416_RFB(points)
+
+fn_interpolate_40GHz_A1.x = real_power
+
+fname = "2023_2_10_a2_synthd_power.csv"
+
+fn_interpolate_40GHz_A2 = interpolate_1D(
+    fname, file_path / "measurements 40 GHz 2023_2/data", indices=[0, 1]
+)
+
+# forgot to add 20 dBm to compensate attenuation from directional coupler
+fn_interpolate_40GHz_A2.y += 20
+
+# dBm setpoints from SynthHD Pro SN 416 RFB
+setpoints_416 = fn_interpolate_40GHz_A2.x
+points = np.vstack([np.ones(len(setpoints_416)) * 10e9, setpoints_416]).T
+real_power = fn_interpolate_SN416_RFB(points)
+
+fn_interpolate_40GHz_A2.x = real_power
+
+calibration_data = dict(
+    [
+        ("26_7", (fn_interpolate_26_6GHz_A1, fn_interpolate_26_6GHz_A2)),
+        ("40", (fn_interpolate_40GHz_A1, fn_interpolate_40GHz_A2)),
+        (
+            "synthesizers",
+            dict(
+                [
+                    (
+                        "SynthHD Pro SN415",
+                        (fn_interpolate_SN415_RFA, fn_interpolate_SN415_RFB),
+                    ),
+                    ("SynthHD Pro SN416", (fn_interpolate_SN416_RFB,)),
+                ]
+            ),
+        ),
+    ]
+)
 
 st.set_page_config(
     page_title="CeNTREX Rotational Cooling Microwave Power Settings",
@@ -11,8 +142,9 @@ st.set_page_config(
     layout="centered",
 )
 
-with open("calibration.pkl", "rb") as f:
-    calibration_data = pickle.load(f)
+
+# with open(file_path / "calibration.pkl", "rb") as f:
+#     calibration_data = pickle.load(f)
 
 with st.sidebar:
     synth_select = st.selectbox(
