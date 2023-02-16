@@ -7,6 +7,12 @@ import plotly.express as px
 import streamlit as st
 from scipy.interpolate import RegularGridInterpolator, interp1d
 
+st.set_page_config(
+    page_title="CeNTREX Rotational Cooling Microwave Power Settings",
+    page_icon="📡",
+    layout="centered",
+)
+
 file_path = Path(__file__).parent
 
 
@@ -31,9 +37,8 @@ def interpolate_2D(
     return RegularGridInterpolator((x, y), z.reshape(len(x), len(y)))
 
 
-"""
-Calibrate SynthHD
-"""
+# Calibrate SynthHD
+
 
 fname_RFA = "2023_02_13_synthHDPro_SN415_RFA_scan.csv"
 fname_RFB = "2023_02_14_synthHDPro_SN415_RFB_scan.csv"
@@ -50,9 +55,9 @@ fn_interpolate_SN416_RFB = interpolate_2D(
     fname_RFB, file_path / "measurements SynthHD/data", indices=[0, 1, 2]
 )
 
-"""
-Calibrate 26.7 GHz
-"""
+
+# Calibrate 26.7 GHz
+
 
 fname = "2023_2_9_synthpower_vg1.csv"
 
@@ -82,9 +87,7 @@ grid = list(fn_interpolate_26_6GHz_A2.grid)
 grid[0] = real_power
 fn_interpolate_26_6GHz_A2.grid = tuple(grid)
 
-"""
-Calibrate 40 GHz
-"""
+# Calibrate 40 GHz
 
 fname = "2023_2_10_a1_synthd_power.csv"
 
@@ -135,13 +138,6 @@ calibration_data = dict(
         ),
     ]
 )
-
-st.set_page_config(
-    page_title="CeNTREX Rotational Cooling Microwave Power Settings",
-    page_icon="📡",
-    layout="centered",
-)
-
 
 # with open(file_path / "calibration.pkl", "rb") as f:
 #     calibration_data = pickle.load(f)
